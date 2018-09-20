@@ -3,7 +3,7 @@ From Opetopic Require Import HoTT_light.
 Import Id_Notations.
 Import Sigma_Notations.
 Set Universe Polymorphism.
-Equations Logic Type Id Id_rect Id_rect_r Id_rect_dep_r Empty unit tt prod pair.
+(*Equations Logic Type Id Id_rect Id_rect_r Id_rect_dep_r Empty unit tt prod pair.*)
 Set Equations Transparent.
 Notation Σ i j := (sigma i j).
 
@@ -108,7 +108,8 @@ Section Trees.
   graft_leaf_in (nd (sigmaI f ϕ)) ψ j k (sigmaI h (sigmaI p l)) m :=
       sigmaI _ h (sigmaI _ p (graft_leaf_in (ϕ h p) (λ k₁ l₁, ψ k₁ &(h , p & l₁)) j k l m)).
 
-  Equations graft_leaf_elim {i : I} (w : W i)
+  
+  Equations(noeqns noind) graft_leaf_elim {i : I} (w : W i)
         (ψ : ∀ j, Leaf w j → W j)  (j : I) (Q : forall (l : Leaf (graft w ψ) j), Type)
         (σ : forall (k : I) (l : Leaf w k) (m : Leaf (ψ k l) j), Q (graft_leaf_in w ψ j k l m))
         (l : Leaf (graft w ψ) j) : Q l :=
@@ -182,6 +183,7 @@ Section Trees.
     apply path_forall. intros p.
     apply aux.
   Defined.
+*)
 
   Definition slice (R : Relator) : Poly (Σ I (Op P)) :=
     {| Op '(i, f) := Σ (W i) (λ w, Σ (Frame w f) (R _ w f)) ;
@@ -189,6 +191,44 @@ Section Trees.
 
 End Trees.
 
+Infix "/" := (slice).
+
 CoInductive PolyDomain (I : Type) (P : Poly I) :=
   { R : Relator P;
-    Dm : PolyDomain _ (slice P R) }.
+    Dm : PolyDomain _ (P / R) }.
+
+Section Substitution.
+  Context {I : Type} (P : Poly I) (R : Relator P).
+
+
+Equations substitute {i : I} (w : W P i) (k : forall (jc : Σ I (Op P)), Node P w jc -> W (P / R) jc) : W P i :=
+{ substitute (lf i) κ := lf _ i ;
+  substitute (nd i  (sigmaI f ϕ)) κ :=
+                           (let pd := κ (i , f) (inl id_refl) in
+                           let _ := flatten _ _ pd in _)
+(*    let p j l := flatten_frm_to pd j l in
+    let ε j l := substitute (ϕ j (p j l)) (fun ic n => κ ic (inr (j , p j l , n))) in
+    graft P (flatten pd) ε *)
+where
+flatten (i : I) (f : Op P i) (pd : W (P / R) (i , f)) : W P i := 
+flatten i f (lf _) := corrola P f;
+flatten i f (nd (sigmaI (sigmaI w (sigmaI α r)) κ)) := substitute w κ }.
+
+where
+flatten_frm_to {i : I} {f : Op P i}  (pd : W (P / R) (i , f)) (j : I)  (l : Leaf P (flatten pd) j) : Param P f j :=
+flatten_frm_to (lf _) j (sigmaI _ (sigmaI p idp)) := p;
+flatten_frm_to (nd (sigmaI (sigmaI w (sigmaI α r)) κ)) j l := f (α j) (substitute-lf-to w κ j l)
+where
+substitute_lf_to {i : I} (w : W P i) (κ : (c : Σ I (Op P)) → Node P w c → W (P // R) c) (j : I) (l : Leaf P (substitute w κ) j) : Leaf P w j :=
+substitute_lf_to (lf i) κ j l := l ;
+substitute_lf_to (nd i (sigmaI f ϕ)) κ j l := 
+    let pd := κ (i , f) (inl idp) in
+    let p j l := flatten-frm-to pd j l in
+    let κ' j l ic n := κ ic (inr (j , p j l , n)) in
+    let ε j l := substitute (ϕ j (p j l)) (fun ic n =>  κ ic (inr (j , p j l , n))) in
+    let (k , l₀ , l₁) := graft-leaf-from P (flatten pd) ε j l in
+    let p' := flatten-frm-to pd k l₀ in
+    let l' := substitute-lf-to (ϕ k (p k l₀)) (κ' k l₀) j l₁
+    in (k , p' , l')
+.
+
