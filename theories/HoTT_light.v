@@ -23,8 +23,9 @@ Proof. intros Px y e. apply id_sym in e. destruct e. exact Px. Defined.
 Polymorphic Definition transport_dep_r (A : Type) (x : A) (P : forall y : A, y = x → Type) :
   P x id_refl → ∀ (y : A) (e : y = x), P y e.
 Proof. intros Px y e. destruct e. apply Px. Defined.
-
-Equations Logic Type Id Id_rect Id_rect_r Id_rect_dep_r Empty unit tt prod pair.
+Require Import Relations.
+Equations Logic Type Id Id_rect Id_rect_r Id_rect_dep_r Empty unit tt prod pair
+          relation clos_trans WellFounded well_founded.
 
 Set Implicit Arguments.
 
@@ -85,8 +86,6 @@ Equations apd {A} {B : A -> Type} (f : forall x : A, B x) {x y : A} (p : x = y) 
   p # f x = f y :=
 apd f id_refl := id_refl.
 
-(** A typeclass that includes the data making [f] into an adjoin equivalence*)
-
 Class IsEquiv {A B : Type} (f : A -> B) := BuildIsEquiv {
   equiv_inv : B -> A ;
   eisretr : Sect equiv_inv f;
@@ -98,7 +97,6 @@ Arguments eissect {A B}%type_scope {f%function_scope} {_} _.
 Arguments eisadj {A B}%type_scope {f%function_scope} {_} _.
 Arguments IsEquiv {A B}%type_scope f%function_scope.
 
-(** A record that includes all the data of an adjoint equivalence. *)
 Record Equiv A B := BuildEquiv {
   equiv_fun : A -> B ;
   equiv_isequiv : IsEquiv equiv_fun
@@ -125,9 +123,6 @@ Hint Unfold pointwise_paths : typeclass_instances.
 
 Notation "f == g" := (pointwise_paths f g) (at level 70, no associativity) : type_scope.
 
-
-(* This definition has slightly changed: the match on the Id is external
-   to the function. *)
 Equations apD10 {A} {B : A -> Type} {f g : forall x, B x} (h : f = g) : f == g :=
 apD10 id_refl := fun h => id_refl.
 
@@ -301,7 +296,7 @@ Lemma concat_A1p_lemma {A} (f : A -> A) (p : forall x, f x = x) {x y : A} (q : x
 Proof.
   funelim (concat_A1p p q).
   elim Heq0 using Id_rect_dep_r. simpl.
-  Fail dependent rewrite Heq0. (* bug *)
+  Fail dependent rewrite Heq0.
   elim Heq using Id_rect_dep_r. simpl. reflexivity.
 Qed.
 

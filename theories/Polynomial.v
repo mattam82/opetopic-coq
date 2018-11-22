@@ -3,7 +3,10 @@ From Opetopic Require Import HoTT_light.
 Import Id_Notations.
 Import Sigma_Notations.
 Set Universe Polymorphism.
-Equations Logic Type Id Id_rect Id_rect_r Id_rect_dep_r Empty unit tt prod pair.
+Require Import Relations.
+Equations Logic Type Id Id_rect Id_rect_r Id_rect_dep_r Empty unit tt prod pair
+                    relation clos_trans WellFounded well_founded.
+
 Set Equations Transparent.
 Notation Σ i j := (sigma i j).
 
