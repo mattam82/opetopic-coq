@@ -1,11 +1,10 @@
-From Equations Require Import Equations.
+From Equations Require Import Equations DepElimDec.
 From Opetopic Require Import HoTT_light.
 Import Id_Notations.
 Import Sigma_Notations.
 Set Universe Polymorphism.
 Require Import Relations.
-Equations Logic Type Id Id_rect Id_rect_r Id_rect_dep_r Empty unit tt prod pair
-                    relation clos_trans WellFounded well_founded.
+(* Require Import Equations.ConstantsType. *)
 
 Set Equations Transparent.
 Notation Σ i j := (sigma i j).
@@ -45,7 +44,23 @@ Section Trees.
   | nd {i : I} (d : Σ (Op P i) (fun f => forall j, Param P f j -> W j)) : W i.
 
   Derive Signature for W.
-  (* Derive NoConfusion for W. *)
+  Derive NoConfusion NoConfusionHom for W.
+
+  Definition W_elim :
+    ∀ P' : ∀ i : I, W i → Type,
+      (∀ i : I, P' i (lf i))
+      → (∀ (i : I) (d : Σ (Op P i) (λ f0 : Op P i, ∀ j : I, Param P f0 j → W j)),
+            (forall (j : I) (p : Param P d.1 j), P' j (d.2 j p)) ->
+            P' i (nd d))
+    → ∀ (i : I) (w : W i), P' i w.
+  Proof.
+    intros P' Hl Hnd.
+    fix IH 2.
+    destruct w.
+    apply Hl.
+    apply Hnd.
+    intros j p. apply IH.
+  Defined.
 
   (* Leaf w j represents the type of paths to leaves of the tree with index j. *)
   Fixpoint Leaf {i} (w : W i) (j : I) :=
@@ -55,18 +70,23 @@ Section Trees.
     end.
 
   (* Leaf w j represents the type of paths to nodes labelled with o. *)
-  Program Fixpoint Node {i} (w : W i) (o : Ops P) : Type :=
-    match w with
-    | lf k => Empty
-    | nd &(f & ϕ) =>
-      (o = &(i & f)) +
-      (Σ I (fun k => Σ (Param P f k) (fun p => Node (ϕ k p) o)))
-    end.
+  Equations Node {i} (w : W i) (o : Ops P) : Type :=
+  Node (lf k) o := Empty;
+  Node {i:=_} (nd (sigmaI f ϕ)) o :=
+                     ((o = (_, f)) +
+                      (Σ I (fun k => Σ (Param P f k) (fun p => Node (ϕ k p) o))))%type.
 
   (* A frame for a tree [w] and operation [f] is an equivalence between
      paths to leaves in [w] indexed by [j] to parameters of [f] of the same index. *)
   Definition Frame {i} (w : W i) (f : Op P i) :=
     forall j, Leaf w j <~> Param P f j.
+
+  Definition InFrame (o : Ops P) : Type :=
+    let '(i, f) := o in
+    Σ (W i) (fun w => Frame w f).
+
+  Definition OutFrame {i} (w : W i) : Type :=
+    Σ (Op P i) (Frame w).
 
   Definition Relator : Type :=
     forall (i : I) (w : W i) (f : Op P i), Frame w f → Type.
@@ -107,7 +127,7 @@ Section Trees.
 
   Equations graft_leaf_in {i : I} (w : W i) (ψ : ∀ j, Leaf w j → W j)
       (j : I) (k : I) (l : Leaf w k) (m : Leaf (ψ k l) j) : Leaf (graft w ψ) j :=
-  graft_leaf_in (lf i) ψ j ?(i) id_refl m := m;
+  graft_leaf_in (lf i) ψ j _ id_refl m := m;
   graft_leaf_in (nd (sigmaI f ϕ)) ψ j k (sigmaI h (sigmaI p l)) m :=
       sigmaI _ h (sigmaI _ p (graft_leaf_in (ϕ h p) (λ k₁ l₁, ψ k₁ &(h , p & l₁)) j k l m)).
 
@@ -134,20 +154,20 @@ Section Trees.
                     _ (λ l₁, Q (h , p, l₁)) (λ k₁ l₁ m₁, σ k₁ (h, p, l₁) m₁) k l m).
   Defined.
 
-  Equations graft_leaf_rec {i : I} (w : W i)
-        (ψ : ∀ j, Leaf w j → W j)  (j : I) (Q : Type)
+  Equations graft_leaf_rec {Q : Type} {i : I} (w : W i)
+        (ψ : ∀ j, Leaf w j → W j)  (j : I)
         (σ : forall (k : I) (l : Leaf w k) (m : Leaf (ψ k l) j), Q)
         (l : Leaf (graft w ψ) j) : Q :=
-  graft_leaf_rec (lf i) ψ j Q σ l := σ i id_refl l;
-  graft_leaf_rec (nd (sigmaI f ϕ)) ψ j Q σ (sigmaI h (sigmaI p l)) :=
+  graft_leaf_rec (lf i) ψ j σ l := σ i id_refl l;
+  graft_leaf_rec (nd (sigmaI f ϕ)) ψ j σ (sigmaI h (sigmaI p l)) :=
     graft_leaf_rec (ϕ h p) (λ j₁ l₁, ψ j₁ (h, p, l₁)) j
-                    Q (λ k₁ l₁ m₁, σ k₁ (h, p, l₁) m₁) l.
+                   (λ k₁ l₁ m₁, σ k₁ (h, p, l₁) m₁) l.
 
   Lemma graft_leaf_rec_β {i : I} (w : W i)
         (ψ : ∀ j, Leaf w j → W j)  (j : I) (Q : Type)
         (σ : forall (k : I) (l : Leaf w k) (m : Leaf (ψ k l) j), Q)
         (k : I) (l : Leaf w k) (m : Leaf (ψ k l) j) :
-    graft_leaf_rec w ψ j Q σ (graft_leaf_in w ψ j k l m) = σ k l m.
+    graft_leaf_rec w ψ j σ (graft_leaf_in w ψ j k l m) = σ k l m.
   Proof.
     revert_until i. revert i. fix aux 2.
     intros i w. destruct w. intros.
@@ -172,7 +192,7 @@ Section Trees.
   Lemma graft_assoc {i : I} (w : W i)
       (ψ₀ : ∀ j, Leaf w j → W j)
       (ψ₁ : ∀ j k (l : Leaf w k), Leaf (ψ₀ k l) j → W j) :
-    graft (graft w ψ₀) (λ j, graft_leaf_rec w ψ₀ j _ (ψ₁ j))
+    graft (graft w ψ₀) (λ j, graft_leaf_rec w ψ₀ j (ψ₁ j))
     = graft w (λ j l, graft (ψ₀ j l) (λ k m, ψ₁ k j l m)).
   Proof.
     revert i w ψ₀ ψ₁.
@@ -192,6 +212,83 @@ Section Trees.
 
 End Trees.
 
+Infix "/" := (slice).
+
 CoInductive PolyDomain (I : Type) (P : Poly I) :=
   { R : Relator P;
-    Dm : PolyDomain _ (slice P R) }.
+    Dm : PolyDomain _ (P / R) }.
+Arguments Node : simpl never.
+Section Substitution.
+  Context {I : Type} (P : Poly I) (R : Relator P).
+
+  Equations subst {i : I} (w : W P i)
+           (k : forall (g : Σ I (Op P)), Node P w g -> InFrame P g) : W P i :=
+    subst (lf i) κ := lf _ i ;
+    subst (nd i (sigmaI f ϕ)) κ :=
+      let '(w, alpha) := κ (i , f) (inl id_refl) in
+      let k' j l g n := κ g (inr (j , equiv_fun (alpha j) l , n)) in
+      let ε j l := subst (ϕ j (equiv_fun (alpha j) l)) (k' j l) in
+      graft P w ε.
+  Set Program Mode.
+
+  Lemma subst_lf_to {i : I} (w : W P i) (κ : forall (g : Ops P), Node P w g → InFrame P g)
+    (j : I) (l : Leaf P (subst w κ) j) : Leaf P w j.
+  Proof.
+    revert dependent w; revert i. refine (W_elim P _ _ _). intros i κ l.
+    - exact l.
+    - intros i [f ϕ] Pd κ.
+      set (wa := (κ (i, f) (inl 1))).
+      set (κ' j l g n := κ g (inr (j , equiv_fun (wa.2 j) l, n))).
+      set (ψ j l := subst (ϕ j (equiv_fun (wa.2 j) l)) (κ' j l)).
+      simpl.
+      refine (graft_leaf_rec P _ _ j _).
+      intros k l0 l1. exists k.
+      set (ϕk := ϕ k ((wa.2 k) l0)).
+      unfold InFrame in *.
+      eexists. subst ψ. simpl in l1. eapply Pd. simpl. eapply l1.
+  Defined.
+
+  (* Lemma subst_lf_from {i : I} (w : W P i) (κ : forall (g : Ops P), Node P w g → InFrame P g) *)
+  (*   (j : I) (l : Leaf P (subst w κ) j) : Leaf P w j. *)
+  (* Proof. *)
+  (*   revert dependent w; revert i. refine (W_elim P _ _ _). intros i κ l. *)
+  (*   - exact l. *)
+  (*   - intros i [f ϕ] Pd κ. *)
+  (*     set (wa := (κ (i, f) (inl 1))). *)
+  (*     set (κ' j l g n := κ g (inr (j , equiv_fun (wa.2 j) l, n))). *)
+  (*     set (ψ j l := subst (ϕ j (equiv_fun (wa.2 j) l)) (κ' j l)). *)
+  (*     simpl. *)
+  (*     refine (graft_leaf_rec P _ _ j _). *)
+  (*     intros k l0 l1. exists k. *)
+  (*     set (ϕk := ϕ k ((wa.2 k) l0)). *)
+  (*     unfold InFrame in *. *)
+  (*     eexists. subst ψ. simpl in l1. eapply Pd. simpl. eapply l1. *)
+  (* Defined. *)
+  Axiom cheat : forall {A}, A.
+  Equations flatten {i : I} {f : Op P i} (pd : W (P / R) (i , f)) : Σ (W P i) (fun fw => Frame P fw f) :=
+    flatten (lf _) := sigmaI _ (corrola P f) (corrola_leaf_equiv _ _);
+    flatten (nd (sigmaI (sigmaI w (sigmaI α r)) κ)) :=
+     let κ' g n := flatten (κ g n) in
+     sigmaI _ (subst w κ') _.
+  Next Obligation.
+    red. apply cheat.
+  Defined.
+End Substitution.
+
+(* where *)
+(* flatten_frm_to {i : I} {f : Op P i}  (pd : W (P / R) (i , f)) (j : I)  (l : Leaf P (flatten pd) j) : Param P f j := *)
+(* flatten_frm_to (lf _) j (sigmaI _ (sigmaI p idp)) := p; *)
+(* flatten_frm_to (nd (sigmaI (sigmaI w (sigmaI α r)) κ)) j l := f (α j) (substitute-lf-to w κ j l) *)
+(* where *)
+(* substitute_lf_to {i : I} (w : W P i) (κ : (c : Σ I (Op P)) → Node P w c → W (P // R) c) (j : I) (l : Leaf P (substitute w κ) j) : Leaf P w j := *)
+(* substitute_lf_to (lf i) κ j l := l ; *)
+(* substitute_lf_to (nd i (sigmaI f ϕ)) κ j l := *)
+(*     let pd := κ (i , f) (inl idp) in *)
+(*     let p j l := flatten-frm-to pd j l in *)
+(*     let κ' j l ic n := κ ic (inr (j , p j l , n)) in *)
+(*     let ε j l := substitute (ϕ j (p j l)) (fun ic n =>  κ ic (inr (j , p j l , n))) in *)
+(*     let (k , l₀ , l₁) := graft-leaf-from P (flatten pd) ε j l in *)
+(*     let p' := flatten-frm-to pd k l₀ in *)
+(*     let l' := substitute-lf-to (ϕ k (p k l₀)) (κ' k l₀) j l₁ *)
+(*     in (k , p' , l') *)
+(* . *)
